@@ -17,6 +17,7 @@ public:
 	FileNodeList();
 	virtual ~FileNodeList();
 	FileNodeList* PutFromList(std::list<FileNode*>& nodelist);
+	int GetNodesList(std::list<FileNode*>& nodelist);
 	FileNode* Put_(FileNode* node);
 	FileNodeList* CopyList();
 	FileNode*& operator [](int ii);
@@ -26,7 +27,8 @@ public:
 class FileNodeHelper
 {
 public:
-	static std::wstring GetPath(FileNode* node);
+	static std::wstring GetFullPath(FileNode* node);
+	static std::wstring GetNodeFullPathName(FileNode* node);
 	static FileNode* PutChild_(FileNode* pnode, FileNode* node);
 	static int MarkUpdate(FileNode* node, DWORD dcat);
 	static DWORD UpdateNode(FileNode* node);
@@ -60,6 +62,7 @@ public:
 	long long compsize;
 	double progress;
 	DWORD updated_cat;
+	DWORD display_cat;
 	int version;
 	int extindex;
 	DWORD color;

@@ -256,7 +256,7 @@ LRESULT CALLBACK CVisualBlockView::WndBlockProc(HWND hWnd, UINT message, WPARAM 
 						BOOL btn = OpenClipboard(hWnd);
 						if (btn) {
 							btn = EmptyClipboard();
-							std::wstring pnm = FileNodeHelper::GetPath(fnd);
+							std::wstring pnm = FileNodeHelper::GetNodeFullPathName(fnd);
 							int cch = pnm.size();
 							HGLOBAL hgb = GlobalAlloc(GMEM_MOVEABLE, (cch + 1) * sizeof(WCHAR));
 							if (hgb) {

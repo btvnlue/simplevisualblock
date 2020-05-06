@@ -39,6 +39,9 @@ int CBlockAnalyzer::SplitRect(RECT& rct, double ratio, RECT& lrct, RECT& rrct)
 		if (esz < SmallSizeLimit) {
 			esz = SmallSizeLimit / 2;
 		}
+		if ((rct.bottom - rct.top - esz) < SmallSizeLimit) {
+			esz = rct.bottom - rct.top - SmallSizeLimit / 2;
+		}
 
 		lrct.left = rct.left;
 		lrct.right = rct.right;
@@ -55,6 +58,9 @@ int CBlockAnalyzer::SplitRect(RECT& rct, double ratio, RECT& lrct, RECT& rrct)
 		esz = long(ratio * esz);
 		if (esz < SmallSizeLimit) {
 			esz = SmallSizeLimit / 2;
+		}
+		if ((rct.right - rct.left - esz) < SmallSizeLimit) {
+			esz = rct.right - rct.left - SmallSizeLimit / 2;
 		}
 
 		lrct.left = rct.left;
@@ -102,7 +108,8 @@ int CBlockAnalyzer::SplitNodesRect(VisualBlock* ori, VisualBlock* left, VisualBl
 		}
 		left->nodes.insert(left->nodes.begin(), lns.begin(), lns.end());
 		right->nodes.insert(right->nodes.begin(), fns.begin(), fns.end());
-		SplitRect(ori->rect, ((double)sts) / tsize, left->rect, right->rect);
+		//SplitRect(ori->rect, ((double)sts) / tsize, left->rect, right->rect);
+		SplitRect(ori->rect, ((double)(tsize - sts)) / tsize, right->rect, left->rect);
 	}
 	return rtn;
 }

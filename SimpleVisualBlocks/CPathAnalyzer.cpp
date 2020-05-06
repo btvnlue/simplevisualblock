@@ -17,7 +17,7 @@ public:
 		: node(fnd)
 	{};
 	virtual int Process__() {
-		std::wstring ffp = FileNodeHelper::GetPath(node);
+		std::wstring ffp = FileNodeHelper::GetNodeFullPathName(node);
 		DWORD dhigh;
 		WCHAR cbuf[1024];
 		wsprintf(cbuf, L"Task: Get compress size [%s]", ffp.c_str());
@@ -35,7 +35,7 @@ public:
 		return 0;
 	}
 	virtual int Process_() {
-		std::wstring ffp = FileNodeHelper::GetPath(node);
+		std::wstring ffp = FileNodeHelper::GetNodeFullPathName(node);
 		HANDLE hpf = ::CreateFile(ffp.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 		if (hpf != INVALID_HANDLE_VALUE) {
 			LARGE_INTEGER lit;
@@ -51,7 +51,7 @@ public:
 		return 0;
 	}
 	virtual int Process() {
-		std::wstring ffp = FileNodeHelper::GetPath(node);
+		std::wstring ffp = FileNodeHelper::GetNodeFullPathName(node);
 		HANDLE hpf = ::CreateFile(ffp.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
 		if (hpf != INVALID_HANDLE_VALUE) {
@@ -109,15 +109,16 @@ public:
 		FileNodeList* nnl = node->nodes.CopyList();
 		CThTask* task;
 		int ii = 0;
+		HANDLE hpf = NULL;
 		BOOL keepseek = ii < nnl->size;
 		while (keepseek) {
 			task = NULL;
 			wnd = (*nnl)[ii];
 			if (wnd->type == FileNode::NT_FILE) {
-				ffp = FileNodeHelper::GetPath(wnd);
-				HANDLE hpf = ::CreateFile(ffp.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+				ffp = FileNodeHelper::GetNodeFullPathName(wnd);
+				hpf = ::CreateFile(ffp.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
-				if (hpf != INVALID_HANDLE_VALUE) {
+				if (hpf) {
 					FILE_STANDARD_INFO fai = { 0 };
 					BOOL btn = GetFileInformationByHandleEx(hpf, FileStandardInfo, &fai, sizeof(FILE_STANDARD_INFO));
 
@@ -175,7 +176,7 @@ public:
 		int dircnt = 0;
 
 		std::wstringstream seekpath;
-		seekpath << FileNodeHelper::GetPath(node);
+		seekpath << FileNodeHelper::GetNodeFullPathName(node);
 		seekpath << "\\*";
 #ifdef _DEBUG
 		Log(seekpath.str().c_str());
@@ -215,7 +216,7 @@ public:
 						vfn->name = new WCHAR[szz];
 						wcscpy_s(vfn->name, szz - 1, cfiles);
 						vfn->type = FileNode::NT_VDIR;
-						vfn->updated_cat = nuc_fcnt | nuc_progress | nuc_size;
+						vfn->updated_cat = nuc_fcnt | nuc_progress | nuc_size | nuc_compsize;
 						vfn->parent = node;
 						dlst.push_back(vfn);
 					}
@@ -224,7 +225,8 @@ public:
 					nnd->name = new WCHAR[szz];
 					wcscpy_s(nnd->name, szz, wfd.cFileName);
 					nnd->type = FileNode::NT_FILE;
-					nnd->size += ULARGE_INTEGER{ wfd.nFileSizeLow, wfd.nFileSizeHigh }.QuadPart;
+					nnd->size = ULARGE_INTEGER{ wfd.nFileSizeLow, wfd.nFileSizeHigh }.QuadPart;
+					nnd->compsize = nnd->size;
 					nnd->filecnt = 1;
 					nnd->progress = 0;
 					nnd->parent = vfn;
@@ -233,6 +235,7 @@ public:
 
 					vfn->filecnt++;
 					vfn->size += nnd->size;
+					vfn->compsize += nnd->compsize;
 				}
 				keepseek = ::FindNextFile(hff, &wfd);
 				keepseek = pool->keeprun ? keepseek : FALSE;
@@ -274,7 +277,7 @@ public:
 		{
 			node->progress = 1;
 		}
-		FileNodeHelper::MarkUpdate(node, nuc_dcnt | nuc_size | nuc_progress | (vfn == NULL?0:nuc_fcnt));
+		FileNodeHelper::MarkUpdate(node, nuc_dcnt | nuc_size | nuc_progress | (vfn == NULL?0:vfn->updated_cat));
 
 		return 0;
 	}
@@ -291,6 +294,33 @@ public:
 //	return 0;
 //}
 
+CPathAnalyzer::CPathAnalyzer()
+	:keeprun(FALSE)
+	,hThUpdate(NULL)
+	,pool(NULL)
+	,root(NULL)
+{
+}
+
+CPathAnalyzer::~CPathAnalyzer()
+{
+	if (hThUpdate) {
+		::WaitForSingleObject(hThUpdate, INFINITE);
+		CloseHandle(hThUpdate);
+		hThUpdate = NULL;
+	}
+}
+
+DWORD WINAPI CPathAnalyzer::ThUpdateTree(LPVOID lpParameter)
+{
+	CPathAnalyzer* ana = (CPathAnalyzer*)lpParameter;
+	while (ana->keeprun) {
+		FileNodeHelper::UpdateNode(ana->root);
+		Sleep(1000);
+	}
+	return 0;
+}
+
 int CPathAnalyzer::StartPathDist(const std::wstring& path)
 {
 	root = new FileNode();
@@ -305,6 +335,10 @@ int CPathAnalyzer::StartPathDist(const std::wstring& path)
 	}
 	pool = new CThreadPool();
 	pool->CreatePool(6);
+
+	DWORD tid;
+	keeprun = TRUE;
+	HANDLE hThUpdate = CreateThread(NULL, 0, ThUpdateTree, this, 0, &tid);
 
 	CDirLoadTask* task = new CDirLoadTask(pool, root);
 	pool->PutTask(task);

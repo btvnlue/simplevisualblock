@@ -7,8 +7,15 @@
 class CPathAnalyzer
 {
 public :
+	CPathAnalyzer();
+	virtual ~CPathAnalyzer();
+
 	FileNode* root;
 	CThreadPool* pool;
+	BOOL keeprun;
+	HANDLE hThUpdate;
+
+	static DWORD WINAPI ThUpdateTree(LPVOID lpParameter);
 
 	//int StartPath(const std::wstring& path);
 	int StartPathDist(const std::wstring& path);

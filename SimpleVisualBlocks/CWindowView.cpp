@@ -46,97 +46,119 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 
 std::map<HWND, CWindowView*> CWindowView::views;
 
-HTREEITEM CWindowView::AddItemNode(HTREEITEM hpnt, FileNode* node)
+HTREEITEM CWindowView::AddNodeItem(HTREEITEM hpnt, FileNode* node)
 {
-	TVINSERTSTRUCT tvi = { 0 };
-	tvi.item.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
-	tvi.item.cchTextMax = (int)wcslen(node->name);
-	tvi.item.pszText = (LPWSTR)node->name;
-	tvi.item.lParam = (LPARAM)node;
-	tvi.item.iImage = node->type == FileNode::NT_FILE ? 4 : (node->type == FileNode::NT_DIR ? 0 : 2);
-	tvi.item.iSelectedImage = tvi.item.iImage;
-	tvi.hParent = hpnt;
+	HTREEITEM hti = NULL;
+	if (mapNode.find(node) == mapNode.end()) {
+		TVINSERTSTRUCT tvi = { 0 };
+		tvi.item.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+		tvi.item.cchTextMax = (int)wcslen(node->name);
+		tvi.item.pszText = (LPWSTR)node->name;
+		tvi.item.lParam = (LPARAM)node;
+		tvi.item.iImage = node->type == FileNode::NT_FILE ? 4 : (node->type == FileNode::NT_DIR ? 0 : 2);
+		tvi.item.iSelectedImage = tvi.item.iImage;
+		tvi.hParent = hpnt;
 
-	HTREEITEM hti = (HTREEITEM)::SendMessage(hNodeTree, TVM_INSERTITEM, 0, (LPARAM)& tvi);
-	if (hti != INVALID_HANDLE_VALUE)
-	{
+		//HTREEITEM hti = (HTREEITEM)::SendMessage(hNodeTree, TVM_INSERTITEM, 0, (LPARAM)& tvi);
+		hti = TreeView_InsertItem(hNodeTree, &tvi);
+		if (hti) {
+			mapNode[node] = hti;
+		}
+	}
+	return hti;
+}
+
+int CWindowView::AddNodeListItem(HTREEITEM hpnt, std::list<FileNode*>& nls)
+{
+	FileNode* cnd;
+	int icnt = 0;
+	HTREEITEM hir;
+
+	for (std::list<FileNode*>::iterator itnl = nls.begin()
+		; itnl!=nls.end()
+		; itnl++) {
+		cnd = *itnl;
+		hir = AddNodeItem(hpnt, cnd);
+		icnt += hir ? 1 : 0;
+	}
+
+	if (icnt > 0) {
 		RECT rct;
 		*(HTREEITEM*)& rct = hpnt;
 
 		SendMessage(hNodeTree, TVM_GETITEMRECT, FALSE, (LPARAM)& rct);
 		::InvalidateRect(hNodeTree, &rct, TRUE);
-		mapNode[node] = hti;
 	}
-	return hti;
+	return icnt;
 }
 
-int CWindowView::GetTreeNodeChildren(HTREEITEM hnode, std::list<HTREEITEM>& clist)
-{
-	HTREEITEM hci = (HTREEITEM)::SendMessage(hNodeTree, TVM_GETNEXTITEM, TVGN_CHILD, (LPARAM)hnode);
-	while (hci)
-	{
-		clist.push_back(hci);
+//int CWindowView::GetTreeNodeChildren(HTREEITEM hnode, std::list<HTREEITEM>& clist)
+//{
+//	HTREEITEM hci = (HTREEITEM)::SendMessage(hNodeTree, TVM_GETNEXTITEM, TVGN_CHILD, (LPARAM)hnode);
+//	while (hci)
+//	{
+//		clist.push_back(hci);
+//
+//		hci = (HTREEITEM)::SendMessage(hNodeTree, TVM_GETNEXTITEM, TVGN_NEXT, (LPARAM)hci);
+//	}
+//	return 0;
+//}
 
-		hci = (HTREEITEM)::SendMessage(hNodeTree, TVM_GETNEXTITEM, TVGN_NEXT, (LPARAM)hci);
-	}
-	return 0;
-}
+//int CWindowView::UpdateNodeData(FileNode* node)
+//{
+//	//DWORD udc_ = FileNodeHelper::UpdateNode(node);
+//	if (0) {
+//		if (selectednode == node) {
+//			::PostMessage(hMain, WM_U_DISPFILENODE, (WPARAM)selectednode, 0);
+//			FileNodeList* cns = selectednode->nodes.CopyList();
+//			FileNode* ndd;
+//			for (int ii = 0; ii < cns->size; ii++) {
+//				ndd = (*cns)[ii];
+//				::PostMessage(hMain, WM_U_DISPFILENODE, (WPARAM)ndd, 0);
+//			}
+//			delete cns;
+//		}
+//	}
+//	return 0?1:0;
+//}
 
-int CWindowView::UpdateNodeData(FileNode* node)
-{
-	DWORD udc = FileNodeHelper::UpdateNode(node);
-	if (udc) {
-		if (selectednode == node) {
-			::PostMessage(hMain, WM_U_DISPFILENODE, (WPARAM)selectednode, udc);
-			FileNodeList* cns = selectednode->nodes.CopyList();
-			FileNode* ndd;
-			for (int ii = 0; ii < cns->size; ii++) {
-				ndd = (*cns)[ii];
-				::PostMessage(hMain, WM_U_DISPFILENODE, (WPARAM)ndd, udc);
-			}
-			delete cns;
-		}
-	}
-	return udc?1:0;
-}
-
-int CWindowView::DisplayNode(HTREEITEM hpnt, FileNode* node, BOOL dochild)
-{
-	HTREEITEM htn;
-	if (mapNode.find(node) == mapNode.end())
-	{
-		htn = AddItemNode(hpnt, node);
-	}
-	else
-	{
-		htn = mapNode[node];
-	}
-
-	int rtn = UpdateNodeData(node);
-
-	if (dochild)
-	{
-		if (htn != INVALID_HANDLE_VALUE)
-		{
-			TVITEM tim = { 0 };
-			tim.hItem = htn;
-			tim.mask = TVIF_STATE;
-			tim.stateMask = TVIS_EXPANDED;
-			::SendMessage(hNodeTree, TVM_GETITEM, 0, (LPARAM)&tim);
-			BOOL bss = (tim.state & TVIS_EXPANDED) ? TRUE : FALSE;
-
-			FileNodeList* fnl = node->nodes.CopyList();
-			std::map<FileNode*, HTREEITEM>::iterator itmn;
-			for (int ii=0; ii<fnl->size; ii++)
-			{
-				DisplayNode(htn, (*fnl)[ii], bss);
-			}
-			delete fnl;
-		}
-	}
-
-	return rtn;
-}
+//int CWindowView::DisplayNode(HTREEITEM hpnt, FileNode* node, BOOL dochild)
+//{
+//	HTREEITEM htn;
+//	if (mapNode.find(node) == mapNode.end())
+//	{
+//		htn = AddItemNode(hpnt, node);
+//	}
+//	else
+//	{
+//		htn = mapNode[node];
+//	}
+//
+//	int rtn = UpdateNodeData(node);
+//
+//	if (dochild)
+//	{
+//		if (htn != INVALID_HANDLE_VALUE)
+//		{
+//			TVITEM tim = { 0 };
+//			tim.hItem = htn;
+//			tim.mask = TVIF_STATE;
+//			tim.stateMask = TVIS_EXPANDED;
+//			::SendMessage(hNodeTree, TVM_GETITEM, 0, (LPARAM)&tim);
+//			BOOL bss = (tim.state & TVIS_EXPANDED) ? TRUE : FALSE;
+//
+//			FileNodeList* fnl = node->nodes.CopyList();
+//			std::map<FileNode*, HTREEITEM>::iterator itmn;
+//			for (int ii=0; ii<fnl->size; ii++)
+//			{
+//				DisplayNode(htn, (*fnl)[ii], bss);
+//			}
+//			delete fnl;
+//		}
+//	}
+//
+//	return rtn;
+//}
 
 class LessCnt : public std::less<std::pair<int, int>>
 {
@@ -187,7 +209,45 @@ int CWindowView::UpdateNodeColor(FileNode* node)
 	return 0;
 }
 
-DWORD WINAPI CWindowView::ThDisplayBlock(_In_ LPVOID lpParameter)
+int CWindowView::UpdateDisplayNode(FileNode* cnd)
+{
+	DWORD cat = cnd->display_cat;
+	if (cat > 0) {
+		cnd->display_cat = 0;
+		::SendMessage(hMain, WM_U_DISPFILENODE, (WPARAM)cnd, cat);
+	}
+	return 0;
+}
+
+DWORD CWindowView::ThDisplayTree(_In_ LPVOID lpParameter)
+{
+	CWindowView* self = reinterpret_cast<CWindowView*>(lpParameter);
+	int udn = 0;
+	while (self->keeprun_ == 1)
+	{
+		self->ProcActions();
+
+		if (self->selectednode) {
+			self->PutAction(UIACTION::UI_ADD_CHILD, self->selectednode);
+			if (self->viewnode) {
+				self->iUpdateForBlock = (self->viewnode->updated_cat | self->viewnode->display_cat) > 0 ? 1 : 0;
+			}
+			self->UpdateDisplayNode(self->selectednode);
+			for (int ii = 0; ii < self->selectednode->nodes.size; ii++) {
+				self->UpdateDisplayNode(self->selectednode->nodes[ii]);
+			}
+			self->UpdateTaskbar(self->selectednode);
+		}
+		udn = self->ana->GetTasksCount();
+		::SendMessage(self->hMain, WM_U_DISPTASKCOUNT, udn, 0);
+
+		::Sleep(1000);
+	}
+	::PostMessage(self->hMain, WM_COMMAND, MAKEWPARAM(IDM_STOPTH, 0), 0);
+	return 0;
+}
+
+DWORD CWindowView::ThDisplayBlock(_In_ LPVOID lpParameter)
 {
 	CWindowView* self = reinterpret_cast<CWindowView*>(lpParameter);
 	VisualBlock* vblk;
@@ -245,23 +305,73 @@ int CWindowView::UpdateTaskbar(FileNode* und) {
 	return 0;
 }
 
-DWORD CWindowView::ThDisplayTree(_In_ LPVOID lpParameter)
+int CWindowView::ProcActions()
 {
-	CWindowView* self = reinterpret_cast<CWindowView*>(lpParameter);
-	int udn = 0;
-	while (self->keeprun_ == 1)
-	{
-		if (self->selectednode) {
-			self->iUpdateForBlock = self->DisplayNode(NULL, self->selectednode, TRUE);
-			self->UpdateTaskbar(self->selectednode);
+	UIACTION act = { UIACTION::UI_NONE, 0 };
+	BOOL keepact = TRUE;
+
+	while (keepact) {
+		act.action = UIACTION::UI_NONE;
+
+		if (::WaitForSingleObject(hAction, 100) == WAIT_OBJECT_0) {
+			if (actions.size() > 0) {
+				act = *actions.begin();
+				actions.pop_front();
+			}
+			else {
+				keepact = FALSE;
+			}
+			::SetEvent(hAction);
 		}
 
-		udn = self->ana->GetTasksCount();
-		::SendMessage(self->hMain, WM_U_DISPTASKCOUNT, udn, 0);
-
-		::Sleep(1000);
+		switch (act.action) {
+		case UIACTION::UI_ADD_NODE:
+			AddNodeItem(act.hItem, act.node);
+			break;
+		case UIACTION::UI_ADD_CHILD:
+		{
+			std::map<FileNode*, HTREEITEM>::iterator itfm = mapNode.find(act.node);
+			if (itfm != mapNode.end()) {
+				std::list<FileNode*> nls;
+				act.node->nodes.GetNodesList(nls);
+				AddNodeListItem(itfm->second, nls);
+			}
+		}
+		break;
+		case UIACTION::UI_DEL_CHILD:
+			break;
+		case UIACTION::UI_EXPAND_NODE:
+		{
+			for (int ii = 0; ii < act.node->nodes.size; ii++) {
+				PutAction(UIACTION::UI_ADD_CHILD, act.node->nodes[ii]);
+			}
+		}
+		break;
+		case UIACTION::UI_COLLS_NODE:
+		{
+			for (int ii = 0; ii < act.node->nodes.size; ii++) {
+				PutAction(UIACTION::UI_DEL_CHILD, act.node->nodes[ii]);
+			}
+		}
+		break;
+		case UIACTION::UI_OPEN_FILENODE:
+			if (act.node->type == FileNode::NT_FILE) {
+				std::wstring pth = FileNodeHelper::GetFullPath(act.node);
+				HINSTANCE hinst = ShellExecute(NULL, L"open", act.node->name, NULL, pth.c_str(), SW_SHOW);
+				if ((long)hinst > 32) {
+					wsprintf(wbuf, L"Open file [%s]", FileNodeHelper::GetNodeFullPathName(act.node).c_str());
+					Log(wbuf);
+				}
+				else {
+					wsprintf(wbuf, L"Failed open file [%s]", FileNodeHelper::GetNodeFullPathName(act.node).c_str());
+					Log(wbuf);
+				}
+			}
+			break;
+		default:
+			break;
+		}
 	}
-	::PostMessage(self->hMain, WM_COMMAND, MAKEWPARAM(IDM_STOPTH, 0), 0);
 	return 0;
 }
 
@@ -376,7 +486,7 @@ int CWindowView::ProcCommandStart(const WCHAR* path)
 					ana->StartPathDist(ptc);
 					bna = new CBlockAnalyzer();
 
-					//DisplayRootNode_(ana->root);
+					PutAction(UIACTION::UI_ADD_NODE, ana->root);
 					selectednode = ana->root;
 					viewnode = ana->root;
 
@@ -407,7 +517,7 @@ BOOL CWindowView::ProcCommandDrives(HWND hWnd, UINT message, WPARAM wParam, LPAR
 #define SYS_DIR_SEL_DIALOG_FOLDER 0x0
 #define SYS_DIR_SEL_DIALOG_TREEID 0x64
 
-INT CALLBACK BrowseCallbackProc(HWND hwnd, UINT uMsg, LPARAM lp, LPARAM pData)
+INT CALLBACK CallbackBrowseFoldersProc(HWND hwnd, UINT uMsg, LPARAM lp, LPARAM pData)
 {
 	switch (uMsg) {
 	case BFFM_INITIALIZED:
@@ -437,7 +547,7 @@ LRESULT CWindowView::ProcSelectDirectory(HWND hPnt)
 {
 	HRESULT hr = CoInitialize(NULL);
 	BROWSEINFO bsi = { 0 };
-	bsi.lpfn = BrowseCallbackProc;
+	bsi.lpfn = CallbackBrowseFoldersProc;
 	bsi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
 	bsi.lpszTitle = L"Select Path";
 	bsi.lParam = (LPARAM)prevPath.c_str();
@@ -519,13 +629,32 @@ LRESULT CWindowView::ProcNotifyTree(HWND hWnd, UINT message, WPARAM wParam, LPAR
 			tgi.iImage = 4;
 			if (pntree->action == TVE_EXPAND) {
 				tgi.iImage = nde->type == FileNode::NT_DIR ? 1 : (nde->type == FileNode::NT_VDIR ? 3 : tgi.iImage);
+				PutAction(UIACTION::UI_EXPAND_NODE, nde);
 			}
 			else if (pntree->action == TVE_COLLAPSE) {
 				tgi.iImage = nde->type == FileNode::NT_DIR ? 0 : (nde->type == FileNode::NT_VDIR ? 2 : tgi.iImage);
+				PutAction(UIACTION::UI_COLLS_NODE, nde);
 			}
 			tgi.iSelectedImage = tgi.iImage;
 			TreeView_SetItem(hNodeTree, &tgi);
 		}
+		break;
+	case NM_DBLCLK:
+	{
+		HTREEITEM hti = (HTREEITEM)SendMessage(hNodeTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
+		TVITEM tgi = { 0 };
+		tgi.mask = TVIF_PARAM;
+		tgi.hItem = hti;
+		::SendMessage(hNodeTree, TVM_GETITEM, 0, (LPARAM)& tgi);
+		if (tgi.lParam)
+		{
+			FileNode* cnd = (FileNode*)tgi.lParam;
+			if (cnd->type == FileNode::NT_FILE) {
+				PutAction(UIACTION::UI_OPEN_FILENODE, cnd);
+			}
+		}
+
+	}
 		break;
 	}
 	return lrst;
@@ -609,7 +738,13 @@ LRESULT CWindowView::ProcNotifyList(HWND hWnd, UINT message, WPARAM wParam, LPAR
 			::SendMessage(hFileList, LVM_GETITEM, 0, (LPARAM)& tgi);
 
 			if (tgi.lParam) {
-				::PostMessage(hMain, WM_U_SELECTTREENODE, 0, tgi.lParam);
+				FileNode* cnd = (FileNode*)tgi.lParam;
+				if (cnd->type == FileNode::NT_FILE) {
+					PutAction(UIACTION::UI_OPEN_FILENODE, cnd);
+				}
+				else {
+					::PostMessage(hMain, WM_U_SELECTTREENODE, 0, tgi.lParam);
+				}
 			}
 		}
 	}
@@ -636,7 +771,7 @@ LRESULT CWindowView::ProcNotifyVisual(HWND hWnd, UINT message, WPARAM wParam, LP
 	{
 		FileNode* cnd = pnmvb->node;
 		if (cnd) {
-			wsprintf(wbuf, L"Copy [%s] to clip board", FileNodeHelper::GetPath(cnd).c_str());
+			wsprintf(wbuf, L"Copy [%s] to clip board", FileNodeHelper::GetNodeFullPathName(cnd).c_str());
 			Log(wbuf);
 		}
 	}
@@ -721,7 +856,6 @@ int CWindowView::UpdateFileNodes(FileNode* node)
 		dcl = node->nodes.CopyList();
 		for (int ii = 0; ii < dcl->size; ii++)
 		{
-//			if ((*dcl)[ii]->type == FileNode::NT_FILE)
 			{
 				InsertNodeInList((*dcl)[ii]);
 			}
@@ -772,6 +906,14 @@ int CWindowView::DispListNode(FileNode* node, DWORD cat)
 	return 0;
 }
 
+int CWindowView::PutAction(UIAction::ACODE act, FileNode* cnd)
+{
+	if (::WaitForSingleObject(hAction, INFINITE) == WAIT_OBJECT_0) {
+		actions.push_back({ act, cnd, NULL});
+		::SetEvent(hAction);
+	}
+	return 0;
+}
 
 //
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
@@ -845,7 +987,7 @@ LRESULT CALLBACK CWindowView::WndProc(HWND hWnd, UINT message, WPARAM wParam, LP
 		if (view)
 		{
 			FileNode* fnd = (FileNode*)wParam;
-			std::wstring pth = FileNodeHelper::GetPath(fnd);
+			std::wstring pth = FileNodeHelper::GetNodeFullPathName(fnd);
 			::SendMessage(view->hStatus, SB_SETTEXT, MAKEWPARAM(MAKEWORD(2, 0), 0), (LPARAM)pth.c_str());
 			WCHAR wbs[1024];
 			FormatNumberView(fnd->size, wbs, 1024);
@@ -1206,6 +1348,8 @@ CWindowView::CWindowView()
 	hbWhite = ::CreateSolidBrush(RGB(0xFF, 0xFF, 0xFF));
 	hbGreen = ::CreateSolidBrush(RGB(0xF0, 0xFF, 0xF0));
 	hbRed = ::CreateSolidBrush(RGB(0xFF, 0xF0, 0xF0));
+
+	hAction = ::CreateEvent(NULL, FALSE, TRUE, NULL);
 }
 
 CWindowView::~CWindowView()
@@ -1217,6 +1361,10 @@ CWindowView::~CWindowView()
 		pTaskbar->Release();
 		pTaskbar = NULL;
 	}
+	if (hAction) {
+		CloseHandle(hAction);
+		hAction = NULL;
+	}
 }
 
 struct ViewParameter{
@@ -1227,7 +1375,7 @@ struct ViewParameter{
 	CWindowView* view;
 };
 
-DWORD WINAPI CWindowView::ThNewWindow(LPVOID lpParameter)
+DWORD CWindowView::ThNewWindow(_In_ LPVOID lpParameter)
 {
 	ViewParameter* vparm = (ViewParameter*)lpParameter;
 	CWindowView* nwv = new CWindowView();

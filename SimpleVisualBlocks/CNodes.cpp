@@ -18,7 +18,7 @@ FileNodeList::~FileNodeList()
 {
 	if (nodearray)
 	{
-		delete nodearray;
+		delete[] nodearray;
 		nodearray = NULL;
 		size = 0;
 	}
@@ -26,17 +26,27 @@ FileNodeList::~FileNodeList()
 
 FileNodeList* FileNodeList::PutFromList(std::list<FileNode*>& nodelist)
 {
-	FileNode** nna = new FileNode * [nodelist.size()];
+	FileNode** nna = new FileNode * [nodelist.size()+1];
+	FileNode* cnd;
 	int ii = 0;
 	for (std::list<FileNode*>::iterator itfn = nodelist.begin()
 		; itfn != nodelist.end()
 		; itfn++) {
-		nna[ii] = *itfn;
+		cnd = *itfn;
+		nna[ii] = cnd;
 		ii++;
 	}
 	nodearray = nna;
 	size = nodelist.size();
 	return this;
+}
+
+int FileNodeList::GetNodesList(std::list<FileNode*>& nodelist)
+{
+	for (int ii = 0; ii < size; ii++) {
+		nodelist.push_back(nodearray[ii]);
+	}
+	return size;
 }
 
 FileNode* FileNodeList::Put_(FileNode* node)
@@ -95,6 +105,7 @@ FileNode::FileNode()
 	, size(0)
 	, progress(0)
 	, updated_cat(0)
+	, display_cat(0)
 	, version(0)
 	, compsize(0)
 	, extindex(NODE_COLOR_UNINDEX)
@@ -111,28 +122,45 @@ FileNode::~FileNode()
 	}
 }
 
-std::wstring FileNodeHelper::GetPath(FileNode* node)
+std::wstring FileNodeHelper::GetFullPath(FileNode* node)
 {
 	std::wstringstream wss;
+
 	if (node->type == FileNode::NT_VDIR) {
 		if (node->parent)
 		{
-			wss << FileNodeHelper::GetPath(node->parent);
+			wss << FileNodeHelper::GetFullPath(node->parent);
 		}
-		else
-		{
-			wss << L"";
-		}
-	} else {
+	}
+	else if (node->type == FileNode::NT_DIR) {
 		if (node->parent)
 		{
-			wss << FileNodeHelper::GetPath(node->parent) << L"\\" << node->name;
+			wss << FileNodeHelper::GetFullPath(node->parent) << L"\\" << node->name;
 		}
 		else
 		{
 			wss << node->name;
 		}
-	}  
+	}
+	else if (node->type == FileNode::NT_FILE) {
+		if (node->parent)
+		{
+			wss << FileNodeHelper::GetFullPath(node->parent);
+		}
+	}
+
+	return wss.str();
+}
+
+std::wstring FileNodeHelper::GetNodeFullPathName(FileNode* node)
+{
+	std::wstringstream wss;
+	if (node->type == FileNode::NT_VDIR || node->type == FileNode::NT_DIR) {
+		wss << FileNodeHelper::GetFullPath(node);
+	}
+	else {
+		wss << FileNodeHelper::GetFullPath(node) << L"\\" << node->name;
+	}
 
 	return wss.str();
 }
@@ -165,6 +193,7 @@ DWORD FileNodeHelper::UpdateNode(FileNode* node)
 	if (cat)
 	{
 		node->updated_cat = 0;
+		node->version++;
 		if (node->type != FileNode::NT_FILE) {
 			if (cat & nuc_dcnt) {
 				node->dircnt = 0;
@@ -230,6 +259,7 @@ DWORD FileNodeHelper::UpdateNode(FileNode* node)
 			}
 			delete fnl;
 		}
+		node->display_cat |= cat;
 	}
 
 	return cat;

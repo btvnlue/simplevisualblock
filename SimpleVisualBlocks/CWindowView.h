@@ -14,6 +14,21 @@ class CPathAnalyzer;
 class CBlockAnalyzer;
 class CSplitWnd;
 
+typedef struct UIAction
+{
+	enum ACODE {
+		UI_NONE
+		, UI_ADD_NODE
+		, UI_ADD_CHILD
+		, UI_DEL_CHILD
+		, UI_COLLS_NODE
+		, UI_EXPAND_NODE
+		, UI_OPEN_FILENODE
+	} action;
+	FileNode* node;
+	HTREEITEM hItem;
+} UIACTION, *PUIACTION;
+
 class CWindowView
 {
 	HWND hMain;
@@ -46,12 +61,14 @@ class CWindowView
 	IUnknown* pTaskbar;
 	std::map<std::wstring, int> mapExtIndex;
 
+	std::list<UIAction> actions;
+	HANDLE hAction;
 public:
 	static std::map<HWND, CWindowView*> views;
 	static CWindowView* GetViewInstance(HINSTANCE hinst);
 	static int WaitAllWindows();
 	static DWORD WINAPI ThDisplayTree(_In_ LPVOID lpParameter);
-	static DWORD WINAPI ThNewWindow(LPVOID lpParameter);
+	static DWORD WINAPI ThNewWindow(_In_ LPVOID lpParameter);
 	int keeprun_;
 	virtual ~CWindowView();
 
@@ -79,13 +96,16 @@ public:
 	int DispListNodeItem(int itemindex, FileNode* node, DWORD cat);
 	LRESULT ProcNotifyTree(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 	static int CALLBACK CompFileNodeList(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
-	HTREEITEM AddItemNode(HTREEITEM hpnt, FileNode* node);
-	int GetTreeNodeChildren(HTREEITEM hnode, std::list<HTREEITEM>& clist);
-	int UpdateNodeData(FileNode* node);
-	int DisplayNode(HTREEITEM hpnt, FileNode* node, BOOL dochild);
+	HTREEITEM AddNodeItem(HTREEITEM hpnt, FileNode* node);
+	int AddNodeListItem(HTREEITEM hpnt, std::list<FileNode*>& nls);
+//	int GetTreeNodeChildren(HTREEITEM hnode, std::list<HTREEITEM>& clist);
+//	int UpdateNodeData(FileNode* node);
+//	int DisplayNode(HTREEITEM hpnt, FileNode* node, BOOL dochild);
 	int UpdateNodeColor(FileNode* node);
-	static DWORD WINAPI ThDisplayBlock(LPVOID lpParameter);
+	int UpdateDisplayNode(FileNode* cnd);
+	static DWORD WINAPI ThDisplayBlock(_In_ LPVOID lpParameter);
 	int UpdateTaskbar(FileNode* und);
+	int ProcActions();
 	int ProcCommandStopTh();
 	int ChangeWindowTitle(const std::wstring& procpath);
 	int ProcCommandStart(const WCHAR* path);
@@ -93,6 +113,7 @@ public:
 	LRESULT ProcSelectDirectory(HWND hPnt);
 	LRESULT ProcCommand(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 	int DispListNode(FileNode* node, DWORD cat);
+	int PutAction(UIAction::ACODE act, FileNode* cnd);
 	static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 	static ATOM MyRegisterClass(HINSTANCE hInstance);
 	int ProcCommandStop();
