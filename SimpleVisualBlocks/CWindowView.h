@@ -24,6 +24,7 @@ typedef struct UIAction
 		, UI_COLLS_NODE
 		, UI_EXPAND_NODE
 		, UI_OPEN_FILENODE
+		, UI_UPDATE_FILENODES
 	} action;
 	FileNode* node;
 	HTREEITEM hItem;
@@ -91,7 +92,8 @@ public:
 	BOOL InitiateNodeTree(HWND hTree);
 	BOOL InitialTaskbar(HWND hpnt);
 	BOOL InitContentWindow(HINSTANCE hinst, HWND hpnt);
-	int InsertNodeInList(FileNode* node);
+	int UpdateFileNodes_(FileNode* node);
+	int InsertNodeInList(FileNode* node, int idx);
 	int UpdateFileNodes(FileNode* node);
 	int DispListNodeItem(int itemindex, FileNode* node, DWORD cat);
 	LRESULT ProcNotifyTree(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -115,6 +117,8 @@ public:
 	int DispListNode(FileNode* node, DWORD cat);
 	int PutAction(UIAction::ACODE act, FileNode* cnd);
 	static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+	int ProcContextMenu(int xx, int yy);
+	int ProcContextMenuTree(int xx, int yy);
 	static ATOM MyRegisterClass(HINSTANCE hInstance);
 	int ProcCommandStop();
 	int SelectTreeNode(FileNode* node);

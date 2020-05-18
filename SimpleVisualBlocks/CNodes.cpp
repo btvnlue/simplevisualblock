@@ -319,3 +319,13 @@ int FileNodeHelper::UpdateNodeColor(FileNode* node, DWORD* colors, int cnt)
 	}
 	return 0;
 }
+
+FileNode* FileNodeHelper::GetFolderNode(FileNode* node)
+{
+	if (node->type != FileNode::NT_DIR) {
+		if (node->parent) {
+			node = GetFolderNode(node->parent);
+		}
+	}
+	return node;
+}

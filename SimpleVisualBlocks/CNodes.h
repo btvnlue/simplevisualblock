@@ -34,6 +34,7 @@ public:
 	static DWORD UpdateNode(FileNode* node);
 	static int UpdateNodeExtIndex(FileNode* node, std::map<std::wstring, int>& mapext, int* mapcnt, int mapcntsize);
 	static int UpdateNodeColor(FileNode* node, DWORD* colors, int cnt);
+	static FileNode* GetFolderNode(FileNode* node);
 };
 
 static const DWORD nuc_size = 0x1;

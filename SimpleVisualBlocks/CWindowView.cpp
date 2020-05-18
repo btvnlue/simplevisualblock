@@ -14,10 +14,15 @@
 #define MAX_LOADSTRING 100
 #define WM_U_UPDATEFILENODES WM_USER + 0x11021
 #define WM_U_DISPFILENODE WM_USER + 0x11022
+#define WM_U_DISPFILENODE_TIMELY WM_USER + 0x11033
 #define WM_U_HOVERNODE WM_USER + 0x11012
 #define WM_U_SELECTNODE WM_USER + 0x2011
 #define WM_U_DISPTASKCOUNT WM_USER + 0x1011
 #define WM_U_SELECTTREENODE WM_USER + 0x1012
+#define WM_U_OPENTREENODEINSHELL WM_USER + 0x987
+#define WM_U_ZOOM_TO_TREENODE WM_USER + 0x989
+#define WM_U_OPENNODEINSHELL WM_USER + 0x988
+#define WM_U_OPENNODEFOLDERINSHELL WM_USER + 0x986
 #define WM_U_DESTROY WM_USER + 0x1022
 #define COMMAND_MENU_DRIVE_BASE 0x1234
 
@@ -241,7 +246,7 @@ DWORD CWindowView::ThDisplayTree(_In_ LPVOID lpParameter)
 		udn = self->ana->GetTasksCount();
 		::SendMessage(self->hMain, WM_U_DISPTASKCOUNT, udn, 0);
 
-		::Sleep(1000);
+		::Sleep(100);
 	}
 	::PostMessage(self->hMain, WM_COMMAND, MAKEWPARAM(IDM_STOPTH, 0), 0);
 	return 0;
@@ -367,6 +372,21 @@ int CWindowView::ProcActions()
 					Log(wbuf);
 				}
 			}
+			else if (act.node->type == FileNode::NT_DIR) {
+				std::wstring pth = FileNodeHelper::GetNodeFullPathName(act.node);
+				HINSTANCE hinst = ShellExecute(NULL, L"open", L".", NULL, pth.c_str(), SW_SHOW);
+				if ((long)hinst > 32) {
+					wsprintf(wbuf, L"Open directory [%s]", FileNodeHelper::GetNodeFullPathName(act.node).c_str());
+					Log(wbuf);
+				}
+				else {
+					wsprintf(wbuf, L"Failed open directory [%s]", FileNodeHelper::GetNodeFullPathName(act.node).c_str());
+					Log(wbuf);
+				}
+			}
+			break;
+		case UIACTION::UI_UPDATE_FILENODES:
+			UpdateFileNodes(act.node);
 			break;
 		default:
 			break;
@@ -588,6 +608,26 @@ LRESULT CWindowView::ProcCommand(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
 	case IDM_PATH_SELECTDIRECTORY:
 		ProcSelectDirectory(hWnd);
 		break;
+	case IDM_OPEN_NODE_IN_SHELL:
+		PostMessage(hMain, WM_U_OPENTREENODEINSHELL, NULL, NULL);
+		break;
+	case IDM_ZOOM_NODE:
+		::PostMessage(hMain, WM_U_ZOOM_TO_TREENODE, NULL, NULL);
+		break;
+	case IDM_TREENODE_PAUSE:
+		if (ana) {
+			ana->Pause();
+		}
+		break;
+	case IDM_TREENODE_RESUME:
+		if (ana) {
+			ana->Resume();
+		}
+	case IDM_OPEN_NODEFOLDER_IN_SHELL:
+		if (ana) {
+			PostMessage(hMain, WM_U_OPENNODEFOLDERINSHELL, NULL, NULL);
+			break;
+		}
 	default:
 		if (!ProcCommandDrives(hWnd, message, wParam, lParam)) {
 			return DefWindowProc(hWnd, message, wParam, lParam);
@@ -615,7 +655,8 @@ LRESULT CWindowView::ProcNotifyTree(HWND hWnd, UINT message, WPARAM wParam, LPAR
 			if (tgi.lParam)
 			{
 				selectednode = (FileNode*)tgi.lParam;
-				::PostMessage(hMain, WM_U_UPDATEFILENODES, 0, tgi.lParam);
+				//::PostMessage(hMain, WM_U_UPDATEFILENODES, 0, tgi.lParam);
+				PutAction(UIACTION::UI_UPDATE_FILENODES, selectednode);
 			}
 		}
 	}
@@ -640,21 +681,7 @@ LRESULT CWindowView::ProcNotifyTree(HWND hWnd, UINT message, WPARAM wParam, LPAR
 		}
 		break;
 	case NM_DBLCLK:
-	{
-		HTREEITEM hti = (HTREEITEM)SendMessage(hNodeTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
-		TVITEM tgi = { 0 };
-		tgi.mask = TVIF_PARAM;
-		tgi.hItem = hti;
-		::SendMessage(hNodeTree, TVM_GETITEM, 0, (LPARAM)& tgi);
-		if (tgi.lParam)
-		{
-			FileNode* cnd = (FileNode*)tgi.lParam;
-			if (cnd->type == FileNode::NT_FILE) {
-				PutAction(UIACTION::UI_OPEN_FILENODE, cnd);
-			}
-		}
-
-	}
+		::PostMessage(hMain, WM_U_OPENTREENODEINSHELL, NULL, NULL);
 		break;
 	}
 	return lrst;
@@ -740,7 +767,7 @@ LRESULT CWindowView::ProcNotifyList(HWND hWnd, UINT message, WPARAM wParam, LPAR
 			if (tgi.lParam) {
 				FileNode* cnd = (FileNode*)tgi.lParam;
 				if (cnd->type == FileNode::NT_FILE) {
-					PutAction(UIACTION::UI_OPEN_FILENODE, cnd);
+					::PostMessage(hMain, WM_U_OPENNODEINSHELL, 0, tgi.lParam);
 				}
 				else {
 					::PostMessage(hMain, WM_U_SELECTTREENODE, 0, tgi.lParam);
@@ -832,17 +859,18 @@ int FormatNumberView(long long num, WCHAR* wbuf, int bsz)
 	return 0;
 }
 
-int CWindowView::InsertNodeInList(FileNode* node)
+int CWindowView::InsertNodeInList(FileNode* node, int idx)
 {
 	LVITEM lvi = { 0 };
 	lvi.mask = LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE;
 	lvi.pszText = (LPWSTR)node->name;
+	lvi.iItem = idx;
 	lvi.cchTextMax = (int)wcslen(node->name);
 	lvi.lParam = (LPARAM)node;
 	lvi.iImage = node->type == FileNode::NT_DIR ? 0 : (node->type == FileNode::NT_VDIR ? 2 : 4);
 	ListView_InsertItem(hFileList, &lvi);
 
-	DispListNodeItem(0, node, nuc_all);
+	DispListNodeItem(lvi.iItem, node, nuc_all);
 
 	return 0;
 }
@@ -852,41 +880,61 @@ int CWindowView::UpdateFileNodes(FileNode* node)
 	if (node)
 	{
 		ListView_DeleteAllItems(hFileList);
-		FileNodeList* dcl;
-		dcl = node->nodes.CopyList();
-		for (int ii = 0; ii < dcl->size; ii++)
+		//FileNodeList* dcl;
+		//dcl = node->nodes.CopyList();
+		for (int ii = 0; ii < node->nodes.size; ii++)
 		{
-			{
-				InsertNodeInList((*dcl)[ii]);
+			if (node==selectednode)	{
+				InsertNodeInList(node->nodes[ii], ii);
 			}
 		}
-		delete dcl;
-		InsertNodeInList(node);
+		//delete dcl;
+		InsertNodeInList(node, 0);
+	}
+	return 0;
+}
+
+int CWindowView::UpdateFileNodes_(FileNode* node)
+{
+	int ii;
+	if (node)
+	{
+		ListView_DeleteAllItems(hFileList);
+		//FileNodeList* dcl;
+		//dcl = node->nodes.CopyList();
+		ii = 0;
+		while (ii<node->nodes.size)
+		{
+			ii = SendMessage(hMain, WM_U_DISPFILENODE_TIMELY, (WPARAM)node, ii);
+		}
+		//delete dcl;
+		InsertNodeInList(node, 0);
 	}
 	return 0;
 }
 
 int CWindowView::DispListNodeItem(int itemindex, FileNode* node, DWORD cat)
 {
+	wchar_t dsbf[1024];
 	if (cat & nuc_progress) {
-		swprintf_s(wbuf, L"%.02f%%", node->progress * 100);
-		ListView_SetItemText(hFileList, itemindex, 1, wbuf);
+		swprintf_s(dsbf, L"%.02f%%", node->progress * 100);
+		ListView_SetItemText(hFileList, itemindex, 1, dsbf);
 	}
 	if (cat & nuc_fcnt) {
-		FormatNumberView(node->filecnt, wbuf, 1024);
-		ListView_SetItemText(hFileList, itemindex, 2, wbuf);
+		FormatNumberView(node->filecnt, dsbf, 1024);
+		ListView_SetItemText(hFileList, itemindex, 2, dsbf);
 	}
 	if (cat & nuc_dcnt) {
-		FormatNumberView(node->dircnt, wbuf, 1024);
-		ListView_SetItemText(hFileList, itemindex, 3, wbuf);
+		FormatNumberView(node->dircnt, dsbf, 1024);
+		ListView_SetItemText(hFileList, itemindex, 3, dsbf);
 	}
 	if (cat & nuc_size) {
-		FormatNumberView(node->size, wbuf, 1024);
-		ListView_SetItemText(hFileList, itemindex, 4, wbuf);
+		FormatNumberView(node->size, dsbf, 1024);
+		ListView_SetItemText(hFileList, itemindex, 4, dsbf);
 	}
 	if (cat & nuc_compsize) {
-		FormatNumberView(node->compsize, wbuf, 1024);
-		ListView_SetItemText(hFileList, itemindex, 5, wbuf);
+		FormatNumberView(node->compsize, dsbf, 1024);
+		ListView_SetItemText(hFileList, itemindex, 5, dsbf);
 	}
 
 	return 0;
@@ -1005,6 +1053,23 @@ LRESULT CALLBACK CWindowView::WndProc(HWND hWnd, UINT message, WPARAM wParam, LP
 			::SendMessage(view->hStatus, SB_SETTEXT, MAKEWPARAM(MAKEWORD(0, 0), 0), (LPARAM)sbs);
 		}
 		break;
+	case WM_U_DISPFILENODE_TIMELY:
+		if (view) {
+			DWORD ttk = GetTickCount();
+			FileNode* cnd = (FileNode*)wParam;
+			int icd = lParam;
+			DWORD ctk = ttk;
+			BOOL kupd = TRUE;
+			while (kupd) {
+				view->InsertNodeInList(cnd->nodes[icd], 0);
+				icd++;
+				kupd = icd < cnd->nodes.size ? kupd : FALSE;
+				ctk = GetTickCount();
+				kupd = ctk - ttk < 0 ? kupd : FALSE;
+			}
+			lrst = icd;
+		}
+		break;
 	case WM_U_DISPFILENODE:
 		if (view) {
 			FileNode* dnd = (FileNode*)wParam;
@@ -1035,12 +1100,106 @@ LRESULT CALLBACK CWindowView::WndProc(HWND hWnd, UINT message, WPARAM wParam, LP
 			PostMessage(hWnd, WM_U_DESTROY, 0, 0);
 		}
 		break;
+	case WM_CONTEXTMENU:
+		if (view) {
+			view->ProcContextMenu(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		}
+		break;
+	case WM_U_OPENNODEINSHELL:
+		if (view) {
+			FileNode* cnd = (FileNode*)lParam;
+			view->PutAction(UIACTION::UI_OPEN_FILENODE, cnd);
+		}
+		break;
+	case WM_U_OPENNODEFOLDERINSHELL:
+		if (view) {
+			HTREEITEM hti = (HTREEITEM)SendMessage(view->hNodeTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
+			TVITEM tgi = { 0 };
+			tgi.mask = TVIF_PARAM;
+			tgi.hItem = hti;
+			::SendMessage(view->hNodeTree, TVM_GETITEM, 0, (LPARAM)& tgi);
+			if (tgi.lParam)
+			{
+				FileNode* cnd = (FileNode*)tgi.lParam;
+				cnd = FileNodeHelper::GetFolderNode(cnd);
+				::PostMessage(hWnd, WM_U_OPENNODEINSHELL, 0, (LPARAM)cnd);
+			}
+
+		}
+		break;
+	case WM_U_OPENTREENODEINSHELL:
+		if (view) {
+			HTREEITEM hti = (HTREEITEM)SendMessage(view->hNodeTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
+			TVITEM tgi = { 0 };
+			tgi.mask = TVIF_PARAM;
+			tgi.hItem = hti;
+			::SendMessage(view->hNodeTree, TVM_GETITEM, 0, (LPARAM)& tgi);
+			if (tgi.lParam)
+			{
+				FileNode* cnd = (FileNode*)tgi.lParam;
+				::PostMessage(hWnd, WM_U_OPENNODEINSHELL, 0, (LPARAM)cnd);
+			}
+		}
+		break;
+	case WM_U_ZOOM_TO_TREENODE:
+		if (view) {
+			HTREEITEM hti = (HTREEITEM)SendMessage(view->hNodeTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
+			TVITEM tgi = { 0 };
+			tgi.mask = TVIF_PARAM;
+			tgi.hItem = hti;
+			::SendMessage(view->hNodeTree, TVM_GETITEM, 0, (LPARAM)& tgi);
+			if (tgi.lParam)
+			{
+				FileNode* cnd = (FileNode*)tgi.lParam;
+				view->viewnode = cnd;
+			}
+		}
+		break;
 	default:
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
 	return lrst;
 }
 
+int CWindowView::ProcContextMenu(int xx, int yy)
+{
+	POINT pnt = { xx, yy };
+	POINT wpt;
+	RECT rct;
+
+	wpt = pnt;
+	::ScreenToClient(hNodeTree, &wpt);
+
+	::GetClientRect(hNodeTree, &rct);
+	if (PtInRect(&rct, wpt)) {
+		ProcContextMenuTree(wpt.x, wpt.y);
+	}
+	return 0;
+}
+
+int CWindowView::ProcContextMenuTree(int xx, int yy)
+{
+	RECT rct;
+	POINT pnt = { xx, yy };
+	HTREEITEM hti = (HTREEITEM)SendMessage(hNodeTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
+	if (hti) {
+		*(HTREEITEM*)& rct = hti;
+		BOOL bst = (BOOL)SendMessage(hNodeTree, TVM_GETITEMRECT, TRUE, (LPARAM)& rct);
+		if (bst) {
+			if (PtInRect(&rct, pnt)) {
+				HINSTANCE hinst = ::GetModuleHandle(NULL);
+				HMENU hcm = LoadMenu(hinst, MAKEINTRESOURCEW(IDC_NODECONTEXT));
+				if (hcm) {
+					HMENU hsm = GetSubMenu(hcm, 0);
+					ClientToScreen(hNodeTree, &pnt);
+					TrackPopupMenu(hsm, TPM_LEFTALIGN | TPM_LEFTBUTTON, pnt.x, pnt.y, 0, hMain, NULL);
+					DestroyMenu(hsm);
+				}
+			}
+		}
+	}
+	return 0;
+}
 //
 //  FUNCTION: MyRegisterClass()
 //

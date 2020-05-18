@@ -22,5 +22,7 @@ public :
 	//int LoadDirectory(FileNode* nodedir);
 	int Stop();
 	int GetTasksCount();
+	int Pause();
+	int Resume();
 };
 

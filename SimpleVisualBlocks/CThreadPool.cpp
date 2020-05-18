@@ -61,6 +61,7 @@ CThreadPool::CThreadPool()
 	, lasttask(NULL)
 	, taskcount(0)
 	, running(0)
+	, pause(FALSE)
 {
 	hQueueFlag = ::CreateEvent(NULL, FALSE, TRUE, NULL);
 }
@@ -123,6 +124,10 @@ int CThreadPool::Stop()
 {
 	keeprun = FALSE;
 	DWORD dwti;
+
+	if (pause) {
+		Resume();
+	}
 	for (std::list<HANDLE>::iterator itth = threads.begin()
 		; itth != threads.end()
 		; itth++)
@@ -152,6 +157,25 @@ int CThreadPool::Stop()
 			delete box;
 		}
 		::SetEvent(hQueueFlag);
+	}
+	return 0;
+}
+
+int CThreadPool::Pause()
+{
+	if (pause == FALSE) {
+		if (::WaitForSingleObject(hQueueFlag, INFINITE) == WAIT_OBJECT_0) {
+			pause = TRUE;
+		}
+	}
+	return 0;
+}
+
+int CThreadPool::Resume()
+{
+	if (pause) {
+		SetEvent(hQueueFlag);
+		pause = FALSE;
 	}
 	return 0;
 }

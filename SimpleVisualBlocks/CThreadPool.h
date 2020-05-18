@@ -20,6 +20,7 @@ public:
 	CThreadPool();
 
 	BOOL keeprun;
+	BOOL pause;
 	long putcount;
 	long taskcount;
 	unsigned long running;
@@ -33,5 +34,7 @@ public:
 	int PutTask(CThTask* task);
 	int GetTasksCount();
 	int Stop();
+	int Pause();
+	int Resume();
 };
 

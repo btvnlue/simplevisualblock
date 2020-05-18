@@ -338,7 +338,7 @@ int CPathAnalyzer::StartPathDist(const std::wstring& path)
 
 	DWORD tid;
 	keeprun = TRUE;
-	HANDLE hThUpdate = CreateThread(NULL, 0, ThUpdateTree, this, 0, &tid);
+	hThUpdate = CreateThread(NULL, 0, ThUpdateTree, this, 0, &tid);
 
 	CDirLoadTask* task = new CDirLoadTask(pool, root);
 	pool->PutTask(task);
@@ -413,8 +413,13 @@ int CPathAnalyzer::StartPathDist(const std::wstring& path)
 
 int CPathAnalyzer::Stop()
 {
-	if (pool)
-	{
+	keeprun = FALSE;
+	if (hThUpdate) {
+		::WaitForSingleObject(hThUpdate, INFINITE);
+		CloseHandle(hThUpdate);
+		hThUpdate = NULL;
+	}
+	if (pool) {
 		pool->Stop();
 		delete pool;
 		pool = NULL;
@@ -429,6 +434,18 @@ int CPathAnalyzer::Stop()
 int CPathAnalyzer::GetTasksCount()
 {
 	return pool->GetTasksCount();
+}
+
+int CPathAnalyzer::Pause()
+{
+	pool->Pause();
+	return 0;
+}
+
+int CPathAnalyzer::Resume()
+{
+	pool->Resume();
+	return 0;
 }
 
 
